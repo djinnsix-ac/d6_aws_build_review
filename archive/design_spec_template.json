@@ -1,0 +1,389 @@
+{
+  "project": {
+    "name": "Example Client Production Environment",
+    "version": "1.0",
+    "date": "2025-11-18",
+    "architect": "Djinn Six Limited"
+  },
+  "account": {
+    "id": "123456789012",
+    "region": "eu-west-2",
+    "environment": "production"
+  },
+  "vpc": {
+    "cidr": "10.0.0.0/16",
+    "dns_hostnames": true,
+    "dns_resolution": true,
+    "subnets": {
+      "public": [
+        {
+          "name": "public-a",
+          "cidr": "10.0.1.0/24",
+          "availability_zone": "eu-west-2a",
+          "auto_assign_public_ip": true
+        },
+        {
+          "name": "public-b",
+          "cidr": "10.0.2.0/24",
+          "availability_zone": "eu-west-2b",
+          "auto_assign_public_ip": true
+        }
+      ],
+      "private": [
+        {
+          "name": "private-a",
+          "cidr": "10.0.10.0/24",
+          "availability_zone": "eu-west-2a"
+        },
+        {
+          "name": "private-b",
+          "cidr": "10.0.11.0/24",
+          "availability_zone": "eu-west-2b"
+        }
+      ],
+      "data": [
+        {
+          "name": "data-a",
+          "cidr": "10.0.20.0/24",
+          "availability_zone": "eu-west-2a"
+        },
+        {
+          "name": "data-b",
+          "cidr": "10.0.21.0/24",
+          "availability_zone": "eu-west-2b"
+        }
+      ]
+    },
+    "internet_gateway": true,
+    "nat_gateways": {
+      "count": 2,
+      "high_availability": true
+    },
+    "vpc_flow_logs": {
+      "enabled": true,
+      "retention_days": 30
+    }
+  },
+  "compute": {
+    "ec2": [
+      {
+        "name": "web-server",
+        "instance_type": "t3.medium",
+        "count": 2,
+        "subnet_type": "private",
+        "ami": "ami-0abcdef1234567890",
+        "monitoring": true,
+        "iam_profile": "web-server-role"
+      },
+      {
+        "name": "bastion",
+        "instance_type": "t3.micro",
+        "count": 1,
+        "subnet_type": "public",
+        "monitoring": true
+      }
+    ],
+    "lambda": [
+      {
+        "name": "api-handler",
+        "runtime": "python3.11",
+        "memory": 512,
+        "timeout": 30,
+        "vpc_enabled": true,
+        "subnet_type": "private"
+      },
+      {
+        "name": "data-processor",
+        "runtime": "python3.11",
+        "memory": 1024,
+        "timeout": 300,
+        "vpc_enabled": true,
+        "subnet_type": "private"
+      }
+    ],
+    "ecs": [
+      {
+        "cluster_name": "app-cluster",
+        "services": [
+          {
+            "name": "web-service",
+            "task_definition": "web-app:1",
+            "desired_count": 2,
+            "launch_type": "FARGATE",
+            "subnet_type": "private"
+          }
+        ]
+      }
+    ]
+  },
+  "databases": {
+    "rds": [
+      {
+        "identifier": "prod-postgres",
+        "engine": "postgres",
+        "engine_version": "15.4",
+        "instance_class": "db.t3.medium",
+        "storage": {
+          "type": "gp3",
+          "size": 100,
+          "encrypted": true
+        },
+        "multi_az": true,
+        "backup": {
+          "retention_period": 7,
+          "window": "03:00-04:00"
+        },
+        "subnet_type": "data",
+        "publicly_accessible": false
+      }
+    ],
+    "elasticache": [
+      {
+        "cluster_id": "session-cache",
+        "engine": "redis",
+        "engine_version": "7.0",
+        "node_type": "cache.t3.micro",
+        "num_nodes": 2,
+        "subnet_type": "data",
+        "transit_encryption": true,
+        "at_rest_encryption": true
+      }
+    ]
+  },
+  "load_balancers": [
+    {
+      "name": "public-alb",
+      "type": "application",
+      "scheme": "internet-facing",
+      "subnet_type": "public",
+      "listeners": [
+        {
+          "protocol": "HTTPS",
+          "port": 443,
+          "ssl_policy": "ELBSecurityPolicy-TLS-1-2-2017-01"
+        },
+        {
+          "protocol": "HTTP",
+          "port": 80,
+          "redirect_to_https": true
+        }
+      ],
+      "target_groups": [
+        {
+          "name": "web-targets",
+          "protocol": "HTTP",
+          "port": 8080,
+          "health_check": {
+            "path": "/health",
+            "interval": 30,
+            "timeout": 5,
+            "healthy_threshold": 2,
+            "unhealthy_threshold": 2
+          }
+        }
+      ]
+    }
+  ],
+  "storage": {
+    "s3": [
+      {
+        "name": "app-data-bucket",
+        "versioning": true,
+        "encryption": {
+          "type": "AES256"
+        },
+        "public_access_block": true,
+        "logging": {
+          "enabled": true,
+          "target_bucket": "logs-bucket"
+        },
+        "lifecycle_policies": [
+          {
+            "id": "archive-old-data",
+            "transitions": [
+              {
+                "days": 90,
+                "storage_class": "GLACIER"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "logs-bucket",
+        "versioning": true,
+        "encryption": {
+          "type": "AES256"
+        },
+        "public_access_block": true,
+        "lifecycle_policies": [
+          {
+            "id": "expire-old-logs",
+            "expiration": {
+              "days": 365
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "security": {
+    "security_groups": [
+      {
+        "name": "alb-sg",
+        "description": "Security group for public ALB",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "from_port": 443,
+            "to_port": 443,
+            "cidr": "0.0.0.0/0"
+          },
+          {
+            "protocol": "tcp",
+            "from_port": 80,
+            "to_port": 80,
+            "cidr": "0.0.0.0/0"
+          }
+        ],
+        "egress": [
+          {
+            "protocol": "-1",
+            "cidr": "0.0.0.0/0"
+          }
+        ]
+      },
+      {
+        "name": "web-server-sg",
+        "description": "Security group for web servers",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "from_port": 8080,
+            "to_port": 8080,
+            "source_security_group": "alb-sg"
+          }
+        ]
+      },
+      {
+        "name": "database-sg",
+        "description": "Security group for RDS database",
+        "ingress": [
+          {
+            "protocol": "tcp",
+            "from_port": 5432,
+            "to_port": 5432,
+            "source_security_group": "web-server-sg"
+          }
+        ]
+      }
+    ],
+    "iam_roles": [
+      {
+        "name": "web-server-role",
+        "service": "ec2.amazonaws.com",
+        "policies": [
+          "AmazonSSMManagedInstanceCore",
+          "CloudWatchAgentServerPolicy"
+        ],
+        "inline_policies": [
+          {
+            "name": "s3-access",
+            "actions": [
+              "s3:GetObject",
+              "s3:PutObject"
+            ],
+            "resources": [
+              "arn:aws:s3:::app-data-bucket/*"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "lambda-execution-role",
+        "service": "lambda.amazonaws.com",
+        "policies": [
+          "AWSLambdaVPCAccessExecutionRole"
+        ]
+      }
+    ]
+  },
+  "monitoring": {
+    "cloudwatch_alarms": [
+      {
+        "name": "high-cpu-utilization",
+        "metric": "CPUUtilization",
+        "namespace": "AWS/EC2",
+        "threshold": 80,
+        "evaluation_periods": 2,
+        "actions": [
+          "sns:critical-alerts"
+        ]
+      },
+      {
+        "name": "rds-high-connections",
+        "metric": "DatabaseConnections",
+        "namespace": "AWS/RDS",
+        "threshold": 80,
+        "evaluation_periods": 2
+      }
+    ],
+    "log_groups": [
+      {
+        "name": "/aws/lambda/api-handler",
+        "retention_days": 30
+      },
+      {
+        "name": "/aws/ecs/app-cluster",
+        "retention_days": 30
+      }
+    ]
+  },
+  "dns": {
+    "route53": [
+      {
+        "hosted_zone": "example.com",
+        "records": [
+          {
+            "name": "www.example.com",
+            "type": "A",
+            "alias": {
+              "target": "public-alb",
+              "evaluate_target_health": true
+            }
+          },
+          {
+            "name": "api.example.com",
+            "type": "A",
+            "alias": {
+              "target": "public-alb",
+              "evaluate_target_health": true
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "compliance_requirements": {
+    "encryption_at_rest": true,
+    "encryption_in_transit": true,
+    "backup_retention_minimum": 7,
+    "multi_az_required": true,
+    "public_access_restricted": true,
+    "logging_enabled": true
+  },
+  "tagging_strategy": {
+    "required_tags": [
+      "Environment",
+      "Project",
+      "Owner",
+      "CostCenter"
+    ],
+    "tag_values": {
+      "Environment": "Production",
+      "Project": "ClientApp",
+      "Owner": "Platform Team",
+      "CostCenter": "Engineering"
+    }
+  }
+}
