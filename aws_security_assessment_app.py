@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """
 AWS Security Assessment Tool - Standalone GUI Application
-Version: 1.0.1
+Version: 1.0.2
 Date: 2025-11-20
 
 Changelog:
+- v1.0.2: Fix verification script argument mismatch and report opening
+  - Changed --input to --collected-data for verification script (line 487)
+  - Removed new=2 parameter from webbrowser.open to prevent new window spawning
 - v1.0.1: Fix bugs with subprocess launching new app instances
   - Test Connection now uses boto3 directly instead of subprocess
   - Assessment execution uses system Python instead of sys.executable
@@ -36,7 +39,7 @@ COLLECTION_SCRIPT = "aws_build_review-v2.3.3.py"
 VERIFICATION_SCRIPT = "aws_build_verification-v2.5.5.py"
 REPORT_SCRIPT = "generate_html_report-v2.13.11.py"
 
-APP_VERSION = "1.0.1"
+APP_VERSION = "1.0.2"
 APP_NAME = "AWS Security Assessment Tool"
 
 # ============================================================================
@@ -484,7 +487,7 @@ class AWSSecurityAssessmentApp:
             verification_script = get_bundled_path(VERIFICATION_SCRIPT)
             result = self._run_script(
                 verification_script,
-                ['--input', collected_json, '--output', verification_json],
+                ['--collected-data', collected_json, '--output', verification_json],
                 env
             )
             
