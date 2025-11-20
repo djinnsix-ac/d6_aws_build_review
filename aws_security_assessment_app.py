@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
 AWS Security Assessment Tool - Standalone GUI Application
-Version: 1.0.0
+Version: 1.0.1
 Date: 2025-11-20
+
+Changelog:
+- v1.0.1: Fix bugs with subprocess launching new app instances
+  - Test Connection now uses boto3 directly instead of subprocess
+  - Assessment execution uses system Python instead of sys.executable
+- v1.0.0: Initial release
 
 A self-contained application that collects AWS infrastructure data,
 performs security verification, and generates comprehensive HTML reports.
@@ -30,7 +36,7 @@ COLLECTION_SCRIPT = "aws_build_review-v2.3.3.py"
 VERIFICATION_SCRIPT = "aws_build_verification-v2.5.5.py"
 REPORT_SCRIPT = "generate_html_report-v2.13.11.py"
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.0.1"
 APP_NAME = "AWS Security Assessment Tool"
 
 # ============================================================================
@@ -323,67 +329,44 @@ class AWSSecurityAssessmentApp:
         """Test AWS connection with provided credentials"""
         self.log_message("Testing AWS connection...")
         
-        # Build environment variables for boto3
-        env = os.environ.copy()
-        
-        if self.use_profile.get():
-            env['AWS_PROFILE'] = self.profile_name.get()
-            cred_info = f"profile '{self.profile_name.get()}'"
-        else:
-            if not self.access_key.get() or not self.secret_key.get():
-                messagebox.showerror("Error", "Please enter Access Key ID and Secret Access Key")
-                return
-            env['AWS_ACCESS_KEY_ID'] = self.access_key.get()
-            env['AWS_SECRET_ACCESS_KEY'] = self.secret_key.get()
-            if self.session_token.get():
-                env['AWS_SESSION_TOKEN'] = self.session_token.get()
-            cred_info = "provided credentials"
-        
-        env['AWS_DEFAULT_REGION'] = self.region.get()
-        
-        # Test with a simple boto3 call
-        test_code = """
-import boto3
-import sys
-try:
-    sts = boto3.client('sts')
-    identity = sts.get_caller_identity()
-    print(f"SUCCESS|{identity['Account']}|{identity['Arn']}")
-except Exception as e:
-    print(f"ERROR|{str(e)}")
-    sys.exit(1)
-"""
+        # Import boto3 directly instead of subprocess
+        import boto3
         
         try:
-            result = subprocess.run(
-                [sys.executable, '-c', test_code],
-                capture_output=True,
-                text=True,
-                env=env,
-                timeout=30
-            )
-            
-            output = result.stdout.strip()
-            if output.startswith('SUCCESS'):
-                _, account, arn = output.split('|')
-                self.log_message(f"✅ Connection successful!")
-                self.log_message(f"   Account: {account}")
-                self.log_message(f"   Identity: {arn}")
-                messagebox.showinfo(
-                    "Success", 
-                    f"AWS connection successful!\n\nAccount: {account}\nRegion: {self.region.get()}"
-                )
+            # Set up credentials
+            if self.use_profile.get():
+                os.environ['AWS_PROFILE'] = self.profile_name.get()
+                cred_info = f"profile '{self.profile_name.get()}'"
             else:
-                error = output.split('|')[1] if '|' in output else result.stderr
-                self.log_message(f"❌ Connection failed: {error}")
-                messagebox.showerror("Connection Failed", f"Could not connect to AWS:\n\n{error}")
+                if not self.access_key.get() or not self.secret_key.get():
+                    messagebox.showerror("Error", "Please enter Access Key ID and Secret Access Key")
+                    return
+                os.environ['AWS_ACCESS_KEY_ID'] = self.access_key.get()
+                os.environ['AWS_SECRET_ACCESS_KEY'] = self.secret_key.get()
+                if self.session_token.get():
+                    os.environ['AWS_SESSION_TOKEN'] = self.session_token.get()
+                cred_info = "provided credentials"
+            
+            os.environ['AWS_DEFAULT_REGION'] = self.region.get()
+            
+            # Test connection directly with boto3
+            sts = boto3.client('sts', region_name=self.region.get())
+            identity = sts.get_caller_identity()
+            
+            account = identity['Account']
+            arn = identity['Arn']
+            
+            self.log_message(f"✅ Connection successful!")
+            self.log_message(f"   Account: {account}")
+            self.log_message(f"   Identity: {arn}")
+            messagebox.showinfo(
+                "Success", 
+                f"AWS connection successful!\n\nAccount: {account}\nRegion: {self.region.get()}"
+            )
         
-        except subprocess.TimeoutExpired:
-            self.log_message("❌ Connection test timed out")
-            messagebox.showerror("Timeout", "Connection test timed out after 30 seconds")
         except Exception as e:
-            self.log_message(f"❌ Error testing connection: {e}")
-            messagebox.showerror("Error", f"Error testing connection:\n\n{e}")
+            self.log_message(f"❌ Connection failed: {str(e)}")
+            messagebox.showerror("Connection Failed", f"Could not connect to AWS:\n\n{str(e)}")
     
     def choose_output_dir(self):
         """Let user choose output directory"""
@@ -570,9 +553,25 @@ except Exception as e:
             self.update_status("Ready")
     
     def _run_script(self, script_path, args, env):
-        """Run a Python script and capture output"""
+        """Run a Python script and capture output
+        
+        When bundled, we can't use subprocess with sys.executable as it points to the app.
+        Instead, we'll import and run the script directly.
+        """
         try:
-            cmd = [sys.executable, script_path] + args
+            # For now, use subprocess with 'python3' command
+            # This assumes Python 3 is installed on the system
+            import shutil
+            
+            # Try to find python3 or python
+            python_cmd = shutil.which('python3') or shutil.which('python')
+            
+            if not python_cmd:
+                raise Exception("Python not found in system PATH. Please install Python 3.")
+            
+            cmd = [python_cmd, script_path] + args
+            
+            self.log_message(f"Running: {os.path.basename(script_path)}...")
             
             process = subprocess.Popen(
                 cmd,
@@ -592,6 +591,8 @@ except Exception as e:
             
         except Exception as e:
             self.log_message(f"Error running script: {e}")
+            import traceback
+            self.log_message(traceback.format_exc())
             return 1
     
     def open_report(self):
