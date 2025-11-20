@@ -1,0 +1,12 @@
+# Requirements for BUILDING the executable
+# End users don't need to install anything!
+
+# Core dependencies (will be bundled into executable)
+boto3>=1.34.0
+pyinstaller>=6.0.0
+
+# These are already included with Python
+# tkinter (built-in)
+# json (built-in)
+# subprocess (built-in)
+# threading (built-in)

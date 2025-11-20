@@ -1,0 +1,81 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project specific - exclude output directories
+html_files/
+json_files/
+output/
+outputs/
+temp/
+tmp/
+*.tmp
+
+# AWS credentials (IMPORTANT - never commit these!)
+.aws/
+credentials
+config
+*.pem
+*.key
+
+# Test/temporary files
+test_*.json
+test_*.html
+collected_data.json
+verification_results.json
+security_assessment_report.html
+
+# Logs
+*.log
+logs/
+
+# OS specific
+Thumbs.db
+.DS_Store
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Large files
+*.zip
+*.tar.gz
+*.rar
+
+# Build artifacts from PyInstaller
+build/
+dist/
