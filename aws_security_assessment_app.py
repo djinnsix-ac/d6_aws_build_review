@@ -37,7 +37,7 @@ import tempfile
 # ============================================================================
 COLLECTION_SCRIPT = "aws_build_review-v2.3.4.py"
 VERIFICATION_SCRIPT = "aws_build_verification-v2.5.10.py"
-REPORT_SCRIPT = "generate_html_report-v2.13.18.py"
+REPORT_SCRIPT = "generate_html_report-v2.13.19.py"
 
 APP_VERSION = "1.0.2"
 APP_NAME = "AWS Security Assessment Tool"
