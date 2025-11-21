@@ -21,23 +21,24 @@ echo.
 REM Required files list
 set REQUIRED_FILES=aws_security_assessment_app.py requirements_build.txt
 
-REM Check for assessment scripts (detect version automatically)
+REM Check for assessment scripts (detect LATEST version automatically with version-aware sorting)
 set FOUND_REVIEW=0
 set FOUND_VERIFICATION=0
 set FOUND_REPORT=0
 
-for %%F in (aws_build_review-v*.py) do (
-    set REVIEW_SCRIPT=%%F
+REM Use PowerShell for version-aware sorting to get the LATEST version
+for /f "delims=" %%i in ('powershell -Command "Get-ChildItem -Filter 'aws_build_review-v*.py' | Sort-Object {[version]($_.Name -replace 'aws_build_review-v(.*)\.py','$1')} | Select-Object -Last 1 -ExpandProperty Name"') do (
+    set REVIEW_SCRIPT=%%i
     set FOUND_REVIEW=1
 )
 
-for %%F in (aws_build_verification-v*.py) do (
-    set VERIFICATION_SCRIPT=%%F
+for /f "delims=" %%i in ('powershell -Command "Get-ChildItem -Filter 'aws_build_verification-v*.py' | Sort-Object {[version]($_.Name -replace 'aws_build_verification-v(.*)\.py','$1')} | Select-Object -Last 1 -ExpandProperty Name"') do (
+    set VERIFICATION_SCRIPT=%%i
     set FOUND_VERIFICATION=1
 )
 
-for %%F in (generate_html_report-v*.py) do (
-    set REPORT_SCRIPT=%%F
+for /f "delims=" %%i in ('powershell -Command "Get-ChildItem -Filter 'generate_html_report-v*.py' | Sort-Object {[version]($_.Name -replace 'generate_html_report-v(.*)\.py','$1')} | Select-Object -Last 1 -ExpandProperty Name"') do (
+    set REPORT_SCRIPT=%%i
     set FOUND_REPORT=1
 )
 
