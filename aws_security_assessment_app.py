@@ -36,8 +36,8 @@ import tempfile
 # CONFIGURATION - UPDATE THESE WHEN YOU CHANGE SCRIPT VERSIONS
 # ============================================================================
 COLLECTION_SCRIPT = "aws_build_review-v2.3.4.py"
-VERIFICATION_SCRIPT = "aws_build_verification-v2.5.8.py"
-REPORT_SCRIPT = "generate_html_report-v2.13.16.py"
+VERIFICATION_SCRIPT = "aws_build_verification-v2.5.9.py"
+REPORT_SCRIPT = "generate_html_report-v2.13.17.py"
 
 APP_VERSION = "1.0.2"
 APP_NAME = "AWS Security Assessment Tool"
