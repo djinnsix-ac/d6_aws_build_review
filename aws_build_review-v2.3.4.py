@@ -14,7 +14,7 @@ Changelog:
 import boto3
 import json
 import argparse
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Any
 import sys
@@ -1010,7 +1010,7 @@ class AWSBuildReviewer:
         data = {
             'AccountId': self.account_id,
             'Region': self.region,
-            'CollectionTimestamp': datetime.utcnow().isoformat(),
+            'CollectionTimestamp': datetime.now(timezone.utc).isoformat(),
         }
         
         collections = [
