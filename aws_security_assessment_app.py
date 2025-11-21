@@ -36,7 +36,7 @@ import tempfile
 # CONFIGURATION - UPDATE THESE WHEN YOU CHANGE SCRIPT VERSIONS
 # ============================================================================
 COLLECTION_SCRIPT = "aws_build_review-v2.4.1.py"
-VERIFICATION_SCRIPT = "aws_build_verification-v2.7.0.py"
+VERIFICATION_SCRIPT = "aws_build_verification-v2.7.1.py"
 REPORT_SCRIPT = "generate_html_report-v2.15.0.py"
 
 APP_VERSION = "1.0.2"
