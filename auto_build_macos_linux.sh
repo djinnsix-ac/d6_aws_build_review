@@ -24,9 +24,9 @@ REQUIRED_FILES=(
 )
 
 # Auto-detect assessment script versions
-REVIEW_SCRIPT=$(ls aws_build_review-v*.py 2>/dev/null | head -n1)
-VERIFICATION_SCRIPT=$(ls aws_build_verification-v*.py 2>/dev/null | head -n1)
-REPORT_SCRIPT=$(ls generate_html_report-v*.py 2>/dev/null | head -n1)
+REVIEW_SCRIPT=$(ls aws_build_review-v*.py 2>/dev/null | tail -n1)
+VERIFICATION_SCRIPT=$(ls aws_build_verification-v*.py 2>/dev/null | sort -V | tail -n1)
+REPORT_SCRIPT=$(ls generate_html_report-v*.py 2>/dev/null | sort -V | tail -n1)
 
 MISSING_FILES=0
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 AWS Build Review Data Collection Script
-Version: 2.3.3
+Version: 2.3.4
 Collects comprehensive AWS infrastructure information for verification against HLDs and detailed designs
 
 Changelog:
@@ -172,6 +172,50 @@ class AWSBuildReviewer:
             'DBClusters': db_clusters,
             'DBSubnetGroups': db_subnet_groups,
             'DBParameterGroups': db_parameter_groups
+        }
+    
+    def get_dynamodb_tables(self) -> Dict[str, Any]:
+        """Collect DynamoDB table configurations"""
+        dynamodb = self.session.client('dynamodb')
+        
+        # List all tables
+        table_names = dynamodb.list_tables().get('TableNames', [])
+        tables_data = []
+        
+        for table_name in table_names:
+            try:
+                # Get table description
+                table_desc = dynamodb.describe_table(TableName=table_name)
+                table_info = table_desc.get('Table', {})
+                
+                # Get table tags
+                try:
+                    table_arn = table_info.get('TableArn')
+                    tags_response = dynamodb.list_tags_of_resource(ResourceArn=table_arn)
+                    table_info['Tags'] = tags_response.get('Tags', [])
+                except:
+                    table_info['Tags'] = []
+                
+                # Get continuous backups status
+                try:
+                    backup_desc = dynamodb.describe_continuous_backups(TableName=table_name)
+                    table_info['ContinuousBackups'] = backup_desc.get('ContinuousBackupsDescription', {})
+                except:
+                    table_info['ContinuousBackups'] = {}
+                
+                # Get time to live status
+                try:
+                    ttl_desc = dynamodb.describe_time_to_live(TableName=table_name)
+                    table_info['TimeToLive'] = ttl_desc.get('TimeToLiveDescription', {})
+                except:
+                    table_info['TimeToLive'] = {}
+                
+                tables_data.append(table_info)
+            except Exception as e:
+                print(f"Error collecting DynamoDB table {table_name}: {str(e)}")
+        
+        return {
+            'Tables': tables_data
         }
     
     def get_s3_buckets(self) -> Dict[str, Any]:
@@ -975,6 +1019,7 @@ class AWSBuildReviewer:
             ('EC2', self.get_ec2_instances),
             ('LoadBalancers', self.get_load_balancers),
             ('RDS', self.get_rds_databases),
+            ('DynamoDB', self.get_dynamodb_tables),
             ('S3', self.get_s3_buckets),
             ('Lambda', self.get_lambda_functions),
             ('IAM', self.get_iam_configuration),
