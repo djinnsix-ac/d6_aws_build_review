@@ -117,7 +117,7 @@ echo This may take 1-2 minutes...
 echo.
 
 REM Build the executable with auto-detected script versions
-pyinstaller ^
+python -m PyInstaller ^
     --onefile ^
     --windowed ^
     --name "AWS-Security-Assessment" ^
