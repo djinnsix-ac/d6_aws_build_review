@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """
 AWS Security Assessment Tool - Standalone GUI Application
-Version: 1.0.2
-Date: 2025-11-20
+Version: 1.0.3
+Date: 2025-12-16
 
 Changelog:
+- v1.0.3: Fix Windows credential handling bug (SignatureDoesNotMatch error)
+  - Add .strip() to all credential inputs to remove whitespace/newlines from pasting
+  - Pass credentials directly to boto3 client instead of relying on environment variables
+  - Clear any cached boto3 sessions before creating new client
+  - Also strip credentials when building environment for subprocess calls
 - v1.0.2: Fix verification script argument mismatch and report opening
   - Changed --input to --collected-data for verification script (line 487)
   - Removed new=2 parameter from webbrowser.open to prevent new window spawning
@@ -39,7 +44,7 @@ COLLECTION_SCRIPT = "aws_build_review-v2.4.1.py"
 VERIFICATION_SCRIPT = "aws_build_verification-v2.7.1.py"
 REPORT_SCRIPT = "generate_html_report-v2.16.1.py"
 
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 APP_NAME = "AWS Security Assessment Tool"
 
 # ============================================================================
@@ -334,26 +339,63 @@ class AWSSecurityAssessmentApp:
         
         # Import boto3 directly instead of subprocess
         import boto3
+        import botocore.session
         
         try:
-            # Set up credentials
+            # Set up credentials - STRIP WHITESPACE from all inputs
             if self.use_profile.get():
-                os.environ['AWS_PROFILE'] = self.profile_name.get()
-                cred_info = f"profile '{self.profile_name.get()}'"
+                profile = self.profile_name.get().strip()
+                os.environ['AWS_PROFILE'] = profile
+                # Clear any manual credential env vars that might interfere
+                for key in ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']:
+                    os.environ.pop(key, None)
+                cred_info = f"profile '{profile}'"
+                
+                # Create client using profile
+                session = boto3.Session(profile_name=profile, region_name=self.region.get().strip())
+                sts = session.client('sts')
             else:
-                if not self.access_key.get() or not self.secret_key.get():
+                # Get and STRIP all credential inputs - this is critical for Windows
+                access_key = self.access_key.get().strip()
+                secret_key = self.secret_key.get().strip()
+                session_token = self.session_token.get().strip()
+                region = self.region.get().strip()
+                
+                if not access_key or not secret_key:
                     messagebox.showerror("Error", "Please enter Access Key ID and Secret Access Key")
                     return
-                os.environ['AWS_ACCESS_KEY_ID'] = self.access_key.get()
-                os.environ['AWS_SECRET_ACCESS_KEY'] = self.secret_key.get()
-                if self.session_token.get():
-                    os.environ['AWS_SESSION_TOKEN'] = self.session_token.get()
+                
+                # Debug logging to help diagnose issues
+                self.log_message(f"   Access Key: {access_key[:8]}...{access_key[-4:]}")
+                self.log_message(f"   Secret Key: {secret_key[:4]}...{secret_key[-4:]} (length: {len(secret_key)})")
+                self.log_message(f"   Session Token: {'Yes (' + str(len(session_token)) + ' chars)' if session_token else 'No'}")
+                self.log_message(f"   Region: {region}")
+                
+                # Clear any profile env var that might interfere
+                os.environ.pop('AWS_PROFILE', None)
+                
+                # Set environment variables (for subprocess calls later)
+                os.environ['AWS_ACCESS_KEY_ID'] = access_key
+                os.environ['AWS_SECRET_ACCESS_KEY'] = secret_key
+                os.environ['AWS_DEFAULT_REGION'] = region
+                if session_token:
+                    os.environ['AWS_SESSION_TOKEN'] = session_token
+                else:
+                    os.environ.pop('AWS_SESSION_TOKEN', None)
+                
                 cred_info = "provided credentials"
+                
+                # Create boto3 client with credentials passed DIRECTLY
+                # This bypasses any cached sessions or environment variable issues
+                sts = boto3.client(
+                    'sts',
+                    aws_access_key_id=access_key,
+                    aws_secret_access_key=secret_key,
+                    aws_session_token=session_token if session_token else None,
+                    region_name=region
+                )
             
-            os.environ['AWS_DEFAULT_REGION'] = self.region.get()
-            
-            # Test connection directly with boto3
-            sts = boto3.client('sts', region_name=self.region.get())
+            # Test connection
             identity = sts.get_caller_identity()
             
             account = identity['Account']
@@ -441,16 +483,31 @@ class AWSSecurityAssessmentApp:
             else:
                 self.log_message(f"Output directory: {self.output_dir}")
             
-            # Setup environment
+            # Setup environment - STRIP WHITESPACE from all credential inputs
             env = os.environ.copy()
+            
+            # Clear any conflicting credentials first
+            for key in ['AWS_PROFILE', 'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN']:
+                env.pop(key, None)
+            
             if self.use_profile.get():
-                env['AWS_PROFILE'] = self.profile_name.get()
+                env['AWS_PROFILE'] = self.profile_name.get().strip()
+                self.log_message(f"Using AWS Profile: {self.profile_name.get().strip()}")
             else:
-                env['AWS_ACCESS_KEY_ID'] = self.access_key.get()
-                env['AWS_SECRET_ACCESS_KEY'] = self.secret_key.get()
-                if self.session_token.get():
-                    env['AWS_SESSION_TOKEN'] = self.session_token.get()
-            env['AWS_DEFAULT_REGION'] = self.region.get()
+                # STRIP all credential values - critical for Windows clipboard paste issues
+                access_key = self.access_key.get().strip()
+                secret_key = self.secret_key.get().strip()
+                session_token = self.session_token.get().strip()
+                
+                env['AWS_ACCESS_KEY_ID'] = access_key
+                env['AWS_SECRET_ACCESS_KEY'] = secret_key
+                if session_token:
+                    env['AWS_SESSION_TOKEN'] = session_token
+                    self.log_message(f"Using manual credentials (with session token)")
+                else:
+                    self.log_message(f"Using manual credentials (no session token)")
+            
+            env['AWS_DEFAULT_REGION'] = self.region.get().strip()
             
             # File paths
             collected_json = os.path.join(self.output_dir, 'collected_data.json')
@@ -466,7 +523,7 @@ class AWSSecurityAssessmentApp:
             collection_script = get_bundled_path(COLLECTION_SCRIPT)
             result = self._run_script(
                 collection_script,
-                ['--region', self.region.get(), '--output', collected_json],
+                ['--region', self.region.get().strip(), '--output', collected_json],
                 env
             )
             
