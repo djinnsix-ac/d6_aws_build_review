@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """
 AWS Security Assessment Tool - Standalone GUI Application
-Version: 1.0.3
+Version: 1.0.5
 Date: 2025-12-16
 
 Changelog:
+- v1.0.5: Make truly standalone - no external Python required
+  - Scripts now run directly within bundled Python using exec()
+  - No more subprocess calls that require external Python installation
+  - Properly captures stdout and displays in log window
+  - Handles sys.exit() from scripts gracefully
+- v1.0.4: Fix Windows Python detection (Microsoft Store stub issue)
 - v1.0.3: Fix Windows credential handling bug (SignatureDoesNotMatch error)
   - Add .strip() to all credential inputs to remove whitespace/newlines from pasting
   - Pass credentials directly to boto3 client instead of relying on environment variables
@@ -44,7 +50,7 @@ COLLECTION_SCRIPT = "aws_build_review-v2.4.2.py"
 VERIFICATION_SCRIPT = "aws_build_verification-v2.7.3.py"
 REPORT_SCRIPT = "generate_html_report-v2.16.1.py"
 
-APP_VERSION = "1.0.3"
+APP_VERSION = "1.0.5"
 APP_NAME = "AWS Security Assessment Tool"
 
 # ============================================================================
@@ -613,41 +619,72 @@ class AWSSecurityAssessmentApp:
             self.update_status("Ready")
     
     def _run_script(self, script_path, args, env):
-        """Run a Python script and capture output
+        """Run a Python script directly within our bundled Python environment.
         
-        When bundled, we can't use subprocess with sys.executable as it points to the app.
-        Instead, we'll import and run the script directly.
+        Instead of spawning a subprocess (which would require external Python),
+        we import and execute the script directly using exec().
         """
         try:
-            # For now, use subprocess with 'python3' command
-            # This assumes Python 3 is installed on the system
-            import shutil
-            
-            # Try to find python3 or python
-            python_cmd = shutil.which('python3') or shutil.which('python')
-            
-            if not python_cmd:
-                raise Exception("Python not found in system PATH. Please install Python 3.")
-            
-            cmd = [python_cmd, script_path] + args
+            import io
+            import contextlib
             
             self.log_message(f"Running: {os.path.basename(script_path)}...")
             
-            process = subprocess.Popen(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                text=True,
-                env=env,
-                bufsize=1
-            )
+            # Set up environment variables
+            old_env = os.environ.copy()
+            os.environ.update(env)
             
-            # Stream output
-            for line in process.stdout:
-                self.log_message(line.rstrip())
+            # Parse arguments and set up sys.argv for the script
+            old_argv = sys.argv.copy()
+            sys.argv = [script_path] + args
             
-            process.wait()
-            return process.returncode
+            # Capture stdout
+            output_buffer = io.StringIO()
+            
+            try:
+                # Read and execute the script
+                with open(script_path, 'r', encoding='utf-8') as f:
+                    script_code = f.read()
+                
+                # Create a namespace for the script
+                script_globals = {
+                    '__name__': '__main__',
+                    '__file__': script_path,
+                    '__builtins__': __builtins__,
+                }
+                
+                # Redirect stdout to capture output
+                old_stdout = sys.stdout
+                sys.stdout = output_buffer
+                
+                try:
+                    # Execute the script
+                    exec(compile(script_code, script_path, 'exec'), script_globals)
+                    return_code = 0
+                except SystemExit as e:
+                    # Script called sys.exit()
+                    return_code = e.code if isinstance(e.code, int) else (1 if e.code else 0)
+                except Exception as e:
+                    self.log_message(f"Script error: {e}")
+                    import traceback
+                    self.log_message(traceback.format_exc())
+                    return_code = 1
+                finally:
+                    sys.stdout = old_stdout
+                    
+                    # Log captured output
+                    output = output_buffer.getvalue()
+                    if output:
+                        for line in output.strip().split('\n'):
+                            self.log_message(line)
+                
+                return return_code
+                
+            finally:
+                # Restore environment and argv
+                os.environ.clear()
+                os.environ.update(old_env)
+                sys.argv = old_argv
             
         except Exception as e:
             self.log_message(f"Error running script: {e}")
